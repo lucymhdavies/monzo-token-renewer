@@ -52,7 +52,7 @@ func auth() {
 				codeChan <- r.URL.Query().Get("code")
 				fmt.Fprintf(w, "Open the Monzo app to approve, and get some API scopes")
 			} else {
-				fmt.Fprintf(w, "Your token is: %v", tok)
+				fmt.Fprintf(w, "App is running")
 			}
 		})
 		log.Fatal(http.ListenAndServe(":8080", nil))
