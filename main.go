@@ -36,8 +36,11 @@ func auth() {
 			AuthURL:  "https://auth.monzo.com/",
 			TokenURL: "https://api.monzo.com/oauth2/token",
 		},
-		RedirectURL: "http://localhost:8080",
+		RedirectURL: getEnv("REDIRECT_URL", "http://localhost:8080"),
 	}
+
+	// TODO: Check if we have a token in Vault already we can reuse
+	// if we do, check if it's valid
 
 	// Redirect user to consent page to ask for permission
 	// for the scopes specified above.
@@ -48,13 +51,23 @@ func auth() {
 
 	go func() {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// TODO: first page should be the link to the login
+			// After login, page should check if we have API scopes yet (and prompt to use Monzo app if not)
+			// Then we should check the token is still valid, and display that
+			// and if the token is no longer valid, we should go back to the login page (or kill the app)
+
 			if !hasToken {
-				codeChan <- r.URL.Query().Get("code")
-				fmt.Fprintf(w, "Open the Monzo app to approve, and get some API scopes")
+				if r.URL.Query().Get("code") == "" {
+					fmt.Fprintf(w, "Visit this URL to initiate auth:\n%s", url)
+				} else {
+					codeChan <- r.URL.Query().Get("code")
+					fmt.Fprintf(w, "Code accepted. Open the Monzo app to approve, and get some API scopes")
+				}
 			} else {
 				fmt.Fprintf(w, "App is running")
 			}
 		})
+		// TODO: get port from env var
 		log.Fatal(http.ListenAndServe(":8080", nil))
 	}()
 
@@ -75,9 +88,18 @@ func auth() {
 
 	fmt.Printf("We got token %s\n\n", tok)
 	client = conf.Client(ctx, tok)
+
+	// TODO: store this token in Vault
+
+	// TODO: if renewing the token results in the token changing... update Vault
 }
 
 func apiLoop() {
+	// TODO: modify this so that we can list pots from the monzo API, then
+	// get the balance for each of those pots, and then store all of that
+	// in Vault.
+	// in that way, we never need to share the API token outside of this application
+
 	urls := []string{
 		"https://api.monzo.com/ping/whoami",
 		"https://api.monzo.com/balance?account_id=" + os.Getenv("MONZO_ACCOUNT_ID"),
@@ -113,4 +135,11 @@ func apiLoop() {
 
 		time.Sleep(sleepDuration)
 	}
+}
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }
